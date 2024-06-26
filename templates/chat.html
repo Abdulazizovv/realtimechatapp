@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .gradient-custom {
+        background: linear-gradient(to bottom right, rgba(252, 203, 144, 1), rgba(213, 126, 235, 1));
+        min-height: 100vh;
+    }
+
+    .mask-custom {
+        background: rgba(24, 24, 16, .2);
+        border-radius: 2em;
+        backdrop-filter: blur(15px);
+        border: 2px solid rgba(255, 255, 255, 0.05);
+        background-clip: padding-box;
+        box-shadow: 10px 10px 10px rgba(46, 54, 68, 0.03);
+    }
+
+    .chat-container {
+        height: 85vh; /* Slightly larger */
+        display: flex;
+        flex-direction: column;
+    }
+
+    .messages-container {
+        flex: 1;
+        overflow-y: auto;
+        margin-bottom: 20px;
+        padding-right: 15px; /* Add padding for scrollbar */
+    }
+
+    .message-input-container {
+        flex-shrink: 0;
+    }
+
+    .sidebar {
+        background: #fff;
+        border-radius: 2em;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    a {
+        text-decoration: none;
+    }
+
+    a:hover {
+        text-decoration: none;
+    }
+
+    .rounded-circle {
+        width: 60px;
+        height: 60px;
+    }
+
+    .scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: #888 #e8e8e8;
+    }
+
+    .scrollbar::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .scrollbar::-webkit-scrollbar-track {
+        background: #e8e8e8;
+    }
+
+    .scrollbar::-webkit-scrollbar-thumb {
+        background-color: #888;
+        border-radius: 20px;
+    }
+</style>
+
+<section class="gradient-custom">
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-md-4 sidebar">
+                <h3 class="text-black">Chat haqida</h3>
+                <p>Nomi: {{chat.name}}</p>
+                <p>Yaratildi: {{chat.created_at|date:"H:i d-m-Y"}}</p>
+            </div>
+            <div class="col-md-8 chat-container d-flex flex-column align-items-center justify-content-center">
+                <div class="messages-container scrollbar">
+                    <ul id="chat-messages" class="list-unstyled text-white">
+                        {% for message in messages %}
+                        {% if message.author.id == request.user.id %}
+                        <li class="d-flex justify-content-between mb-4">
+                            <div class="card mask-custom w-100">
+                                <div class="card-header d-flex justify-content-between p-3"
+                                    style="border-bottom: 1px solid rgba(255,255,255,.3);">
+                                    <p class="fw-bold mb-0">{{ message.author }}</p>
+                                    <p class="text-light small mb-0">
+                                        <i class="far fa-clock"></i> {{message.created_at|date:"H:i d-m-Y"}}</p>
+                                </div>
+                                <div class="card-body">
+                                    <p class="mb-0">{{ message.text }}</p>
+                                </div>
+                            </div>
+                            <img src="{{ message.author.profile.image.url }}" alt="avatar"
+                                class="rounded-circle d-flex align-self-start ms-3 shadow-1-strong">
+                        </li>
+                        {% else %}
+                        <li class="d-flex justify-content-between mb-4">
+                            <img src="{{ message.author.profile.image.url }}" alt="avatar"
+                                class="rounded-circle d-flex align-self-start me-3 shadow-1-strong">
+                            <div class="card mask-custom">
+                                <div class="card-header d-flex justify-content-between p-3"
+                                    style="border-bottom: 1px solid rgba(255,255,255,.3);">
+                                    <p class="fw-bold mb-0">{{ message.author }}</p>
+                                    <p class="text-light small mb-0 ml-3">
+                                        <i class="far fa-clock"></i> {{message.created_at|date:"H:i d-m-Y"}}</p>
+                                </div>
+                                <div class="card-body">
+                                    <p class="mb-0">{{ message.text }}</p>
+                                </div>
+                            </div>
+                        </li>
+                        {% endif %}
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="message-input-container w-100">
+                    {% if request.user in chat.members.all %}
+                    <form action="javascript:void(0);">
+                        <div class="mb-3">
+                            <div data-mdb-input-init class="form-outline form-white">
+                                <textarea class="form-control" id="messageInput" rows="2"></textarea>
+                                <label class="form-label" for="messageInput">Xabar</label>
+                            </div>
+                        </div>
+                        <button id="sendMessageBtn" type="button" data-mdb-button-init data-mdb-ripple-init
+                            class="btn btn-light btn-lg btn-rounded float-end">Yuborish</button>
+                    </form>
+                    {% else %}
+                    <button id="joinRoomBtn" type="button" data-mdb-button-init data-mdb-ripple-init
+                        class="btn btn-light btn-lg btn-rounded w-100">Qo'shilish</button>
+                    {% endif %}
+                </div>
+            </div>
+            <!-- <div class="col-md-4 sidebar">
+                <h3 class="text-black">Members</h3>
+                <ul class="list-unstyled">
+                    {% for member in chat.members.all %}
+                    <li class="mb-3 d-flex align-items-center">
+                        <img src="{{ member.profile.image.url }}" alt="avatar"
+                            class="rounded-circle me-3 shadow-1-strong">
+                        <p class="mb-0">{{ member.username }}</p>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div> -->
+        </div>
+    </div>
+</section>
+
+<script>
+    $(document).ready(function () {
+        var roomId = "{{ chat.id }}";
+        var currentUser = "{{ request.user }}";
+        var chatSocket = new WebSocket('ws://' + window.location.host + '/ws/chat/' + roomId + '/');
+        console.log("WebSocket connection works");
+
+        chatSocket.onmessage = function (e) {
+            var data = JSON.parse(e.data);
+            var message = data['message'];
+            var sender = data['author'];
+            var time = data['time'];
+            var imageUrl = data['image_url'];
+            console.log(data);
+
+            var newMessage = '';
+            if (sender == currentUser) {
+                newMessage = `
+                    <li class="d-flex justify-content-between mb-4">
+                        <div class="card mask-custom w-100">
+                            <div class="card-header d-flex justify-content-between p-3"
+                                style="border-bottom: 1px solid rgba(255,255,255,.3);">
+                                <p class="fw-bold mb-0">${sender}</p>
+                                <p class="text-light small mb-0 ml-3"><i class="far fa-clock"></i> ${time}</p>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-0">${message}</p>
+                            </div>
+                        </div>
+                        <img src="${imageUrl}" alt="avatar"
+                            class="rounded-circle d-flex align-self-start ms-3 shadow-1-strong">
+                    </li>
+                `;
+            } else {
+                newMessage = `
+                    <li class="d-flex justify-content-between mb-4">
+                        <img src="${imageUrl}" alt="avatar"
+                            class="rounded-circle d-flex align-self-start me-3 shadow-1-strong">
+                        <div class="card mask-custom">
+                            <div class="card-header d-flex justify-content-between p-3"
+                                style="border-bottom: 1px solid rgba(255,255,255,.3);">
+                                <p class="fw-bold mb-0">${sender}</p>
+                                <p class="text-light small mb-0 ml-3"><i class="far fa-clock"></i> ${time}</p>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-0">${message}</p>
+                            </div>
+                        </div>
+                    </li>
+                `;
+            }
+
+            $('#chat-messages').append(newMessage);
+            $('.messages-container').scrollTop($('.messages-container')[0].scrollHeight);
+        };
+
+        chatSocket.onclose = function (e) {
+            console.error('Chat socket closed unexpectedly');
+        };
+
+        $('#sendMessageBtn').click(function () {
+            var messageInputDom = $('#messageInput');
+            var message = messageInputDom.val().trim();
+            if (message !== '') {
+                chatSocket.send(JSON.stringify({
+                    'message': message
+                }));
+                messageInputDom.val('');
+            }
+        });
+
+        $('#joinRoomBtn').click(function () {
+            $.ajax({
+                url: "{% url 'join_chat' chat.id %}",
+                type: "POST",
+                data: {
+                    'csrfmiddlewaretoken': '{{ csrf_token }}',
+                },
+                success: function (response) {
+                    location.reload();
+                    $('#chat_messages').append("<p>Yangi a'zo qo'shildi</p>")
+                },
+                error: function (response) {
+                    alert('Error joining room');
+                }
+            });
+        });
+
+        $('.messages-container').scrollTop($('.messages-container')[0].scrollHeight);
+    });
+</script>
+
+{% endblock content %}
